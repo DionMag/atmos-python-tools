@@ -19,7 +19,7 @@ def calculate_richardson_mixing_height(csv_path: str, height_col: str, wind_col:
         tuple: (DataFrame με [Ύψος, Ri], Εκτιμώμενο ύψος ανάμιξης)
     """
     try:
-        data = pd.read_csv(csv_path)
+        df = pd.read_csv(csv_path)
     except FileNotFoundError:
         print(f"Σφάλμα: Το αρχείο '{csv_path}' δεν βρέθηκε.")
         return None, None
@@ -35,19 +35,19 @@ def calculate_richardson_mixing_height(csv_path: str, height_col: str, wind_col:
         return None, None
 
     # Η επιφανειακή θερμοκρασία λαμβάνεται από το πρώτο επίπεδο
-    surftemp = data[temp_col].iloc[0]
+    surftemp = df[temp_col].iloc[0]
 
     # Υπολογισμός Αριθμού Bulk Richardson
     # Σχέση: Ri = (g * z * (Θ(z) - Θs)) / (Θs * U(z)^2)
     # Προστέθηκε np.where για αποφυγή διαίρεσης με το μηδέν (όταν ταχύτητα ανέμου = 0)
-    denominator = surftemp * (data[wind_col] ** 2)
+    denominator = surftemp * (df[wind_col] ** 2)
     data['Ri'] = np.where(
         denominator != 0, 
-        (g * data[height_col] * (data[temp_col] - surftemp)) / denominator, 
+        (g * df[height_col] * (df[temp_col] - surftemp)) / denominator, 
         np.nan
     )
 
-    results = data[[height_col, 'Ri']].dropna().copy()
+    results = df[[height_col, 'Ri']].dropna().copy()
 
     if results.empty:
         print("Δεν υπάρχουν έγκυρα σημεία μετά τον υπολογισμό του Ri.")
