@@ -1,0 +1,137 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import sys
+from typing import Tuple, Optional
+
+def calculate_parcel_mixing_height(
+    csv_path: str, 
+    alt_col: str, 
+    temp_col: str, 
+    surface_temp_boost: float = 0.0
+) -> Tuple[Optional[pd.DataFrame], Optional[float]]:
+    """
+    Calculates mixing height by scanning from the surface upwards for the first 
+    sign change (intersection) between the environmental profile and the surface temp line.
+    """
+    try:
+        df = pd.read_csv(csv_path)
+    except FileNotFoundError:
+        print(f"Error: File '{csv_path}' not found.")
+        return None, None
+    except Exception as e:
+        print(f"Error reading CSV: {e}")
+        return None, None
+
+    required_cols = [alt_col, temp_col]
+    if not all(col in df.columns for col in required_cols):
+        print(f"Error: Missing required columns in CSV: {required_cols}")
+        return None, None
+
+    # Clean and sort data by altitude from bottom to top
+    data = df[required_cols].dropna().sort_values(by=alt_col).copy()
+
+    if data.empty:
+        print("Error: No valid data points found.")
+        return None, None
+
+    # Automatically define surface temperature from the first point + optional heating
+    sfc_temp_value = data[temp_col].iloc[0] + surface_temp_boost
+    data['Generated_Sfc'] = sfc_temp_value
+
+    # Calculate difference: Environmental Temp - Surface Temp Line
+    diff = data[temp_col] - data['Generated_Sfc']
+    
+    mixing_height = float('nan')
+
+    
+    # Robust bottom-up search, starting from index 1 to avoid surface 0-crossing
+    for i in range(1, len(data) - 1):
+        if diff.iloc[i] * diff.iloc[i+1] <= 0:
+            z1 = data[alt_col].iloc[i]
+            z2 = data[alt_col].iloc[i+1]
+            d1 = diff.iloc[i]
+            d2 = diff.iloc[i+1]
+            
+            if d2 != d1:
+                mixing_height = z1 - d1 * (z2 - z1) / (d2 - d1)
+            else:
+                mixing_height = z1
+            break
+
+    return data, mixing_height
+
+
+def plot_holzworth_sounding(
+    data: pd.DataFrame, 
+    alt_col: str, 
+    temp_col: str, 
+    mixing_height: float, 
+    output_pdf: str = 'Holzworth_Parcel.pdf'
+):
+    """
+    Plots the environmental sounding zoomed strictly into the atmospheric boundary layer.
+    """
+    plt.figure(figsize=(6, 6))
+
+    # --- ZOOM ON BOUNDARY LAYER ---
+    
+    # 1. Set y lim on 50% above mixing height else at least 3 Km 
+    if not np.isnan(mixing_height):
+        max_y = max(mixing_height * 1.5, 1500)
+    else:
+        max_y = 3000  # αν δεν βρεθεί τομή
+        
+    plt.ylim(0, max_y)
+
+    # Filtering for visible y 
+    visible_data = data[data[alt_col] <= max_y]
+    if visible_data.empty:
+        visible_data = data
+
+    # Temperature limits depending on data
+    min_temp = min(visible_data[temp_col].min(), visible_data['Generated_Sfc'].min())
+    max_temp = max(visible_data[temp_col].max(), visible_data['Generated_Sfc'].max())
+    
+    plt.xlim(min_temp - 1.0, max_temp + 2.0)
+    # ----------------------------------------------------
+
+    # Plots
+    plt.plot(data[temp_col], data[alt_col], label='Environmental Profile', color='blue', linestyle='-', linewidth=2)
+    plt.plot(data['Generated_Sfc'], data[alt_col], label='Surface Temp Line', color='red', linestyle='--', linewidth=2)
+
+    if not np.isnan(mixing_height):
+        plt.axhline(y=mixing_height, color='green', linestyle=':', linewidth=2, label=f'Mixing Height: {mixing_height:.1f} m')
+        plt.scatter([data['Generated_Sfc'].iloc[0]], [mixing_height], color='green', zorder=5)
+
+    plt.title('Holzworth Method - Boundary Layer Zoom', fontsize=14, fontweight='bold')
+    plt.xlabel('Potential Temperature (K)', fontsize=12)
+    plt.ylabel('Altitude (m)', fontsize=12)
+    plt.legend(loc='best', fontsize=10)
+    plt.grid(True, linestyle=':', alpha=0.7)
+    
+    ax = plt.gca()
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.5)
+        spine.set_color('black')
+        
+    plt.tight_layout()
+    plt.savefig(output_pdf, bbox_inches='tight', dpi=300)
+    print(f"Plot successfully saved as '{output_pdf}'")
+    plt.show()
+
+
+if __name__ == "__main__":     
+    CSV_FILE = 'HolzworthParcel.csv'
+    ALT = 'Altitude1'
+    TEMP = 'Din1'
+    SURFACE_BOOST = 0
+
+    print("Running robust Holzworth Parcel Method Analysis...")
+    df_results, z_mix = calculate_parcel_mixing_height(CSV_FILE, ALT, TEMP, surface_temp_boost=SURFACE_BOOST)
+
+    if df_results is not None and not np.isnan(z_mix):
+        print(f"\n=> Estimated Mixing Height (First Intersection): {z_mix:.2f} m")
+        plot_holzworth_sounding(df_results, ALT, TEMP, z_mix)
+    else:
+        print("\n=> Could not determine mixing height.")
