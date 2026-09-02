@@ -54,9 +54,12 @@ def calculate_richardson_mixing_height(csv_path: str, height_col: str, wind_col:
         return results, None
 
     # Εύρεση του αμέσως μικρότερου και αμέσως μεγαλύτερου Ri σε σχέση με το target_ri
+    # Φτιάχνω 2 νεα dataframe με τις τιμές μικρότερες του target_ri και μεγαλύτερες. 
     below = results[results['Ri'] < target_ri]
     above = results[results['Ri'] >= target_ri]
 
+    # Μια λίστα που θελω τις 2 γραμμές με τα εκατέρωθεν του target_ri και τα αντίστοιχα ύψη 
+    # Μετά ελέγχω τις αποστάσεις των Ri απο το target_ri για να βρώ την μικρότερη αρα και τα κοντινότερα Ri εκατέρωθεν. Παίρνω αυτές τις γραμμές δηλαδή και το ύψος και τις βάζω στην λίστα. 
     closest_points_list = []
     if not below.empty:
         closest_points_list.append(below.loc[(below['Ri'] - target_ri).abs().idxmin()])
@@ -65,6 +68,7 @@ def calculate_richardson_mixing_height(csv_path: str, height_col: str, wind_col:
 
     closest_points = pd.DataFrame(closest_points_list).drop_duplicates()
 
+    # Για ασφάλεια τσεκάρω τις διαστάσεις της λίστας
     if closest_points.shape[0] < 2:
         if closest_points.shape[0] == 1 and closest_points['Ri'].iloc[0] == target_ri:
             return results, closest_points[height_col].iloc[0]
@@ -84,15 +88,17 @@ def calculate_richardson_mixing_height(csv_path: str, height_col: str, wind_col:
     
     return results, estimated_height
 
+#Εδω ετοιμάζουμε το script για να μπορεί να γίνει import. Μπορώ απλά να     καλέσω την συνάρτηση δίνοντας το όνομα του αρχείου που θέλω. 
+
 if __name__ == "__main__":
-    CSV_FILE = 'Data.csv'
+    CSV_FILE = 'Data.csv' #Εδω αν τρέξω μόνο το script βάζω το όνομα του αρχείου με τα δεδομένα και τα ονόματα των στηλών 
     ALT_COL = 'Altitude1'
     WIND_COL = 'ws1'
     TEMP_COL = 'Virtual1'
     TARGET_RI = 0.25
 
     print("Εκκίνηση υπολογισμού Ύψους Ανάμιξης (Μέθοδος Richardson)...")
-    results_df, mixing_height = calculate_richardson_mixing_height(
+    results_df, mixing_height = calculate_richardson_mixing_height(   # Αν κάνω import αντικαθιστώ τα σωστά ονόματα στηλών. 
         csv_path=CSV_FILE,
         height_col=ALT_COL,
         wind_col=WIND_COL,
